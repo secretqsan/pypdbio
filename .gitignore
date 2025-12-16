@@ -1,0 +1,4 @@
+*.pdb
+dist
+pypdbio.egg-info
+.idea
