@@ -2,12 +2,11 @@ from setuptools import setup
 
 setup(
     name='pypdbio',
-    version='0.0.1',
+    version='0.0.2',
     py_modules=['pypdbio'],
-    requires=['requests'],
     install_requires=['requests'],
     url='',
-    license='',
+    license='MIT',
     author='Xiaoyang Liu',
     author_email='liuxiaoyang_Q@outlook.com',
     description='A package for downloading/reading/writing pdb file'

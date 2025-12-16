@@ -2,3 +2,4 @@
 dist
 pypdbio.egg-info
 .idea
+__pycache__
