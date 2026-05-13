@@ -1,0 +1,416 @@
+# pylint: disable=missing-module-docstring
+# pylint: disable=missing-function-docstring
+# pylint: disable=protected-access
+from math import pi
+from dataclasses import dataclass
+
+from .utils import index_of_chain_id
+
+
+@dataclass
+class ObsoleteInfo:
+    """
+    PDB obsolete information class.
+    """
+    replace_date: str = ""
+    new_entry_id: str = ""
+
+
+@dataclass
+class JournalInfo:
+    """
+    PDB journal information class.
+    """
+    author: list[str] = None
+    title: str = ""
+    editor: list[str] = None
+    journal: str = ""
+    volume: str = ""
+    pages: str = ""
+    year: str = ""
+    publisher: str = ""
+    issn: str = ""
+    essn: str = ""
+    pmid: str = ""
+    doi: str = ""
+
+
+@dataclass
+class RevisionInfo:
+    """
+    PDB revision information class.
+    """
+    date: str = ""
+    modifications: list[str] = None
+
+
+@dataclass
+class ReplaceInfo:
+    """
+    PDB replace information class.
+    """
+    date: str = ""
+    ids: list[str] = None
+
+
+@dataclass
+class PdbMetaData:
+    """
+    PDB meta data class.
+    """
+    classification: str = ""
+    date: str = ""
+    pdb_id: str = ""
+    author: list[str] = None
+    split: list[str] = None
+    obsolete: dict = None
+    caveat: str = ""
+    compounds: list[dict] = None
+    keywords: list[str] = None
+    experiment: list[str] = None
+    model_type: str = ""
+    title = ""
+    revisions: list[RevisionInfo] = None
+    replace: ReplaceInfo = None
+    journal: JournalInfo = None
+    remark: dict = None
+    _compound_text: str = ""
+    _source_text: str = ""
+
+
+@dataclass
+class CrystalInfo:
+    """
+    PDB Crystal information class.
+    """
+    space_group: str = ""
+    cell_angles: list[float] = None
+    cell_lengths: list[float] = None
+    z: int = 1
+    origin_matrix: list[list[float]] = None
+    scale_matrix: list[list[float]] = None
+    ncs_matrix: list[list[list[float]]] = None
+
+
+class IterableBase:
+    """Class with a child list."""
+
+    def __init__(self):
+        self._children = []
+
+    def __len__(self):
+        return len(self._children)
+
+    def __getitem__(self, index):
+        return self._children[index]
+
+    def __setitem__(self, index, value):
+        self._children[index] = value
+
+    def __delitem__(self, index):
+        del self._children[index]
+
+    def __iter__(self):
+        return iter(self._children)
+
+    def add(self, value):
+        self._children.append(value)
+
+
+@dataclass
+class ConnectivityInfo:
+    """Connectivity information class."""
+    ss_bond: list[str] = None
+    link: list[str] = None
+    cis_peptide: list[str] = None
+    connections: dict = None
+
+
+@dataclass
+class SecondaryStructureInfo:
+    """Secondary structure information class."""
+    helix: dict = None
+    sheet: dict = None
+
+
+class PdbData(IterableBase):
+    """
+    PDB data class.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._tmp = {
+            "primary": {},
+        }
+        self.secondary_structure = SecondaryStructureInfo()
+        self.heterogen = {}
+        self.meta = PdbMetaData()
+        self.crystallographic = CrystalInfo()
+        self.models = self._children
+        self.index = 0
+        self.connectivity = ConnectivityInfo()
+        self.sites = {}
+        self._validation_info = {}
+
+    def add_model(self, model):
+        self.add(model)
+
+
+class Model(IterableBase):
+    """Model class."""
+
+    def __init__(self):
+        super().__init__()
+        self.chains = self._children
+        self._occupied_chain_ids = []
+
+    def add_chain(self, chain):
+        self.add(chain)
+
+    def __getitem__(self, index):
+        if isinstance(index, str):
+            self._occupied_chain_ids.clear()
+            for chain in self.chains:
+                if chain.id != "":
+                    self._occupied_chain_ids.append(chain.id)
+                    if chain.id == index:
+                        return chain
+            return self.chains[index_of_chain_id(index, self._occupied_chain_ids)]
+        return super().__getitem__(index)
+
+
+class Chain(IterableBase):
+    """Chain class."""
+
+    def __init__(self):
+        super().__init__()
+        self.id = ""
+        self.sequence_info = None
+        self.residues = self._children
+
+    def add_residue(self, residue):
+        self.add(residue)
+
+    def __getitem__(self, index):
+        if isinstance(index, str):
+            icode = index[-1].strip()
+            seq_num = int(index[:-1])
+            current_res_num = 0
+            for residue in self.residues:
+                if residue.icode == "":
+                    current_res_num += 1
+                if current_res_num == seq_num and residue.icode == icode:
+                    return residue
+            raise IndexError(f"Residue {index} not found")
+        elif isinstance(index, int):
+            return super().__getitem__(index)
+        else:
+            raise TypeError(f"Invalid index type: {type(index)}")
+
+class Residue(IterableBase):
+    """Residue class."""
+
+    def __init__(self, name):
+        super().__init__()
+        self.het = False
+        self.name = name
+        self.atoms = self._children
+        self.icode = ""
+        self.end_of_chain = False
+
+    def add_atom(self, atom):
+        self.add(atom)
+
+
+class Atom:
+    """Atom class."""
+
+    def __init__(
+        self,
+        name="",
+        coord=(0.0, 0.0, 0.0),
+        temp_factor=0.0,
+        element="",
+        charge=0,
+        occupancy=0.0,
+        alt_loc="",
+    ):
+        self.name = name
+        self.coord = coord
+        self.__temp_factor = temp_factor
+        self.occupancy = occupancy
+        self.alt_loc = alt_loc
+        self.element = element
+        self.charge = charge
+
+    @property
+    def temp_factor(self):
+        if isinstance(self.__temp_factor, list):
+            return 8 * pi ** 2 * sum(self.__temp_factor[0:3]) / 3
+        else:
+            return self.__temp_factor
+
+    @property
+    def anisotropic_temp_factor(self):
+        if isinstance(self.__temp_factor, list):
+            return self.__temp_factor
+        else:
+            return None
+
+    @temp_factor.setter
+    def temp_factor(self, value):
+        self.__temp_factor = value
+
+# secondary structure class
+
+
+@dataclass
+class SheetStrand:
+    """Sheet class."""
+    init_chain_id: str = ""
+    init_seq_num: int = 0
+    init_icode: str = ""
+
+    end_chain_id: str = ""
+    end_res_seq: int = 0
+    end_icode: str = ""
+
+    sense: int = 0
+
+    cur_atom: str = ""
+    cur_chain_id: str = ""
+    cur_res_seq: int = None
+    cur_icode: str = ""
+
+    prev_atom: str = ""
+    prev_chain_id: str = ""
+    prev_res_seq: int = None
+    prev_icode: str = ""
+
+
+@dataclass
+class Helix:
+    """Helix class."""
+    chain_id: str = ""
+    init_seq_num: int = 0
+    init_icode: str = ""
+    end_seq_num: int = 0
+    end_icode: str = ""
+    helix_class: int = 0
+    comment: str = ""
+
+
+@dataclass
+class Site:
+    """Site class."""
+    seq_num: int = 0
+    chain_id: str = ""
+    icode: str = ""
+
+
+@dataclass
+class Heterogen:
+    """Heterogen class."""
+    name: str = ""
+    comment: str = ""
+    _alias_text: str = ""
+    formula: str = ""
+    alias: list[str] = None
+
+
+@dataclass
+class SequenceDBInfo:
+    """Sequence database information class."""
+    init_seq_num: int = 0
+    init_icode: str = ""
+    end_seq_num: int = 0
+    end_icode: str = ""
+    database: str = ""
+    db_accession: str = ""
+    db_id_code: str = ""
+    db_init_seq_num: int = 0
+    db_end_seq_num: int = 0
+    db_init_icode: str = ""
+    db_end_icode: str = ""
+
+
+@dataclass
+class SequenceInfo:
+    """Sequence information class."""
+    sequence_db: SequenceDBInfo = None
+    sequence: list[str] = None
+    sequence_differences: list[SequenceDifferenceInfo] = None
+    residue_modifications: list[ResidueModificationInfo] = None
+
+
+@dataclass
+class SequenceDifferenceInfo:
+    """Sequence difference class."""
+    alt_res_name: str = ""
+    seq_num: int = 0
+    icode: str = ""
+    database: str = ""
+    db_accession: str = ""
+    db_res_num: int = 0
+    db_res_name: str = ""
+    comment: str = ""
+
+
+@dataclass
+class ResidueModificationInfo:
+    """Residue modification class."""
+    seq_num: int = 0
+    std_res: str = ""
+    comment: str = ""
+    icode: str = ""
+
+
+@dataclass
+class NcsMatrix:
+    """NCS matrix information class."""
+    matrix: list[list[float]] = None
+    given: bool = False
+
+
+@dataclass
+class SsBond:
+    """SSBOND information class."""
+    chain_id_1: str = ""
+    seq_num_1: int = 0
+    icode_1: str = ""
+    chain_id_2: str = ""
+    seq_num_2: int = 0
+    icode_2: str = ""
+    symmetry_operation_1: str = "1555"
+    symmetry_operation_2: str = "1555"
+    distance: float = 0.0
+
+
+@dataclass
+class Link:
+    """LINK information class."""
+    name_1: str = ""
+    alt_loc_1: str = ""
+    chain_id_1: str = ""
+    seq_num_1: int = 0
+    icode_1: str = ""
+    name_2: str = ""
+    alt_loc_2: str = ""
+    chain_id_2: str = ""
+    seq_num_2: int = 0
+    icode_2: str = ""
+    distance: float = 0.0
+
+
+@dataclass
+class CisPeptide:
+    """Cis-peptide information class."""
+    chain_id_1: str = ""
+    seq_num_1: int = 0
+    icode_1: str = ""
+    chain_id_2: str = ""
+    seq_num_2: int = 0
+    icode_2: str = ""
+    num_model: int = 0
+    measure: float = 0.0
