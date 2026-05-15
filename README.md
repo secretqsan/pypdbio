@@ -8,6 +8,8 @@
 pip install pypdbio
 ```
 
+依赖：`requests`（用于 `fetch`）。
+
 ## 快速开始
 
 ```python
@@ -25,12 +27,10 @@ writer = PdbWriter("1aki_copy.pdb")
 writer.write(pdb_data)
 ```
 
-## 主要能力
-
-- 通过 PDB ID 从 RCSB 下载结构文件
-- 将 PDB 文件解析为可遍历的数据结构（模型、链、残基、原子）
-- 将数据结构写回标准 PDB 文本文件
-
 ## 许可证
 
 MIT
+
+## API 参考
+
+包根 `from pypdbio import ...` 已导出解析/写出类型及 HEADER、连通性、二级结构、序列等相关数据类（以 `pypdbio.__all__` 为准）。完整说明见 [docs/reference.md](docs/reference.md)。

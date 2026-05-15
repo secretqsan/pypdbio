@@ -6,6 +6,8 @@ import warnings
 from .models import *
 from .reader_helper import *
 from .utils import next_chain_id
+from .unit import unit_config
+
 
 class PdbReader:
     """
@@ -31,11 +33,10 @@ class PdbReader:
         self.__n_model_expected = -1
         self.__current_model = -1
         self.__current_chain_id = ''
-        self.__current_chain_index = -1
         self.__occupied_chain_ids = []
         self.__current_residue_id = -1
 
-    #post processing functions
+    # post processing functions
     def __check_status(self, pdb_data):
         if pdb_data.meta.obsolete is not None:
             obslte_info = pdb_data.meta.obsolete
@@ -43,7 +44,7 @@ class PdbReader:
                 f"It seems that the PDB file you use is outdated at {obslte_info.replace_date}."
                 f"The new entry ID is {obslte_info.new_entry_id}."
             )
-        if pdb_data.meta.split is not None:
+        if len(pdb_data.meta.split) > 0:
             warnings.warn(
                 "It seems that the PDB file you use is incomplete."
                 f" The other parts can be found by id {', '.join(pdb_data.meta.split)}."
@@ -89,19 +90,21 @@ class PdbReader:
             for entry in compound_entries:
                 key, value = entry
                 if "mol_id" == key:
-                    safe_append(meta, "compounds", {})
+                    meta.compounds.append({})
                 else:
                     meta.compounds[-1][key] = value
         if meta._source_text != "":
             source_entries = parse_kv_entries(meta._source_text)
-            n_source = sum(1 for entry in source_entries if entry[0] == "mol_id")
+            n_source = sum(
+                1 for entry in source_entries if entry[0] == "mol_id")
             if len(meta.compounds) != n_source:
-                warnings.warn("The number of compounds and sources are not the same.")
+                warnings.warn(
+                    "The number of compounds and sources are not the same.")
             else:
                 current_compound_index = -1
                 for entry in source_entries:
                     key, value = entry
-                    if key == "mol_id" :
+                    if key == "mol_id":
                         current_compound_index += 1
                         meta.compounds[current_compound_index]["source"] = {}
                     else:
@@ -121,6 +124,7 @@ class PdbReader:
                 het._alias_text = ""
 
     # section parsing functions
+
     def __parse_title_section(self, line, pdb_data):
         meta = pdb_data.meta
         if line.startswith("HEADER"):
@@ -161,7 +165,9 @@ class PdbReader:
             line_keywords = parse_keywords(line)
             if line[8:10].strip() != '' and len(line_keywords) > 0:
                 line_keywords[0] = line_keywords[0].split(maxsplit=1)[-1]
-            safe_extend(meta, "keywords", [keyword for keyword in line_keywords if keyword != ''])
+            meta.keywords.extend(
+                [keyword for keyword in line_keywords if keyword != '']
+            )
         elif line.startswith("EXPDTA"):
             meta.experiment = parse_continuous_field(
                 line, meta.experiment, parse_expdta
@@ -178,7 +184,7 @@ class PdbReader:
             )
         elif line.startswith("REVDAT"):
             date, modifications = parse_revdat(line)
-            safe_append(meta, "revisions", RevisionInfo(
+            meta.revisions.append(RevisionInfo(
                 date=date,
                 modifications=modifications
             ))
@@ -251,13 +257,14 @@ class PdbReader:
 
     def __parse_primary_structure_section(self, line, pdb_data):
         primary_structure = pdb_data._tmp["primary"]
+
         def check_chain_id(chain_id):
             if chain_id not in primary_structure:
                 primary_structure[chain_id] = SequenceInfo()
         if line.startswith("DBREF "):
-            chain_id, seq_begin, insert_begin, seq_end, insert_end,\
-            database, db_accession, db_id_code, db_seq_begin,\
-            db_begin_icode, db_seq_end, db_end_icode = parse_dbref(line)
+            chain_id, seq_begin, insert_begin, seq_end, insert_end, \
+                database, db_accession, db_id_code, db_seq_begin, \
+                db_begin_icode, db_seq_end, db_end_icode = parse_dbref(line)
             check_chain_id(chain_id)
             primary_structure[chain_id].sequence_db = SequenceDBInfo(
                 init_seq_num=seq_begin,
@@ -273,7 +280,8 @@ class PdbReader:
                 db_end_icode=db_end_icode,
             )
         elif line.startswith("DBREF1"):
-            chain_id, seq_begin, insert_begin, seq_end, insert_end, database, db_id_code = parse_dbref1(line)
+            chain_id, seq_begin, insert_begin, seq_end, insert_end, \
+                database, db_id_code = parse_dbref1(line)
             check_chain_id(chain_id)
             primary_structure[chain_id].sequence_db = SequenceDBInfo(
                 init_seq_num=seq_begin,
@@ -287,34 +295,39 @@ class PdbReader:
                 end_icode=insert_end,
             )
         elif line.startswith("DBREF2"):
-            chain_id, db_accession, db_seq_begin, db_seq_end = parse_dbref2(line)
+            chain_id, db_accession, db_seq_begin, db_seq_end = parse_dbref2(
+                line)
             check_chain_id(chain_id)
             dbref = primary_structure[chain_id].sequence_db
             dbref.db_accession = db_accession
             dbref.db_init_seq_num = db_seq_begin
             dbref.db_end_seq_num = db_seq_end
         elif line.startswith("SEQADV"):
-            res_name, chain_id, seq_num, icode, database, db_accession, db_res, db_seq, conflict = parse_seqadv(line)
+            res_name, chain_id, seq_num, icode, \
+                database, db_accession, db_res, db_seq, conflict = parse_seqadv(
+                    line)
             check_chain_id(chain_id)
-            safe_append(primary_structure[chain_id], "sequence_differences", SequenceDifferenceInfo(
-                seq_num=seq_num,
-                database=database,
-                alt_res_name=res_name,
-                db_accession=db_accession,
-                db_res_num=db_seq,
-                db_res_name=db_res,
-                comment=conflict,
-                icode=icode,
-            ))
+            primary_structure[chain_id].sequence_differences.append(
+                SequenceDifferenceInfo(
+                    seq_num=seq_num,
+                    database=database,
+                    alt_res_name=res_name,
+                    db_accession=db_accession,
+                    db_res_num=db_seq,
+                    db_res_name=db_res,
+                    comment=conflict,
+                    icode=icode,
+                )
+            )
         elif line.startswith("SEQRES"):
             self.__validation_info["num_seq"] += 1
             chain_id, _, sequence = parse_seqres(line)
             check_chain_id(chain_id)
-            safe_extend(primary_structure[chain_id], "sequence", sequence)
+            primary_structure[chain_id].sequence.extend(sequence)
         elif line.startswith("MODRES"):
             _, chain_id, seq_num, icode, std_res, comment = parse_modres(line)
             check_chain_id(chain_id)
-            safe_append(primary_structure[chain_id], "residue_modifications", ResidueModificationInfo(
+            primary_structure[chain_id].residue_modifications.append(ResidueModificationInfo(
                 seq_num=seq_num,
                 icode=icode,
                 std_res=std_res,
@@ -333,9 +346,9 @@ class PdbReader:
             if self.__current_model == -1:
                 self.__current_model += 1
                 pdb_data.models.append(Model())
-            typ, _, atom_name, alt_loc,\
-                res_name, chain_id, residue_id, icode,\
-                coord_x, coord_y, coord_z,\
+            typ, _, atom_name, alt_loc, \
+                res_name, chain_id, residue_id, icode, \
+                coord_x, coord_y, coord_z, \
                 occupancy, temp_factor, element, charge = parse_atom(line)
             if chain_id != self.__current_chain_id:
                 new_chain = Chain()
@@ -348,16 +361,21 @@ class PdbReader:
                 self.__current_chain_id = chain_id
                 pdb_data.models[self.__current_model].add_chain(new_chain)
                 self.__current_residue_id = -1
+            current_chain = pdb_data.models[self.__current_model].chains[-1]
             if residue_id != self.__current_residue_id:
                 self.__current_residue_id = residue_id
-                pdb_data.models[self.__current_model].chains[-1].add_residue(Residue(res_name))
-                is_het = True if typ == "HETATM" else False
-                pdb_data.models[self.__current_model].chains[-1].residues[-1].het = is_het
-                pdb_data.models[self.__current_model].chains[-1].residues[-1].icode = icode
-            pdb_data.models[-1].chains[-1].residues[-1].add_atom(Atom(
+                current_chain.add_residue(Residue(res_name))
+                is_het = typ == "HETATM"
+                current_chain.residues[-1].het = is_het
+                current_chain.residues[-1].icode = icode
+            current_chain.residues[-1].add_atom(Atom(
                 name=atom_name,
-                coord=(coord_x, coord_y, coord_z),
-                temp_factor=temp_factor,
+                coord=(
+                    coord_x * unit_config.conversion_factor,
+                    coord_y * unit_config.conversion_factor,
+                    coord_z * unit_config.conversion_factor,
+                ),
+                temp_factor=temp_factor * unit_config.conversion_factor ** 2,
                 occupancy=occupancy,
                 alt_loc=alt_loc,
                 element=element,
@@ -365,13 +383,16 @@ class PdbReader:
             ))
         elif line.startswith("TER   "):
             self.__validation_info["num_ter"] += 1
-            pdb_data.models[-1].chains[-1].residues[-1].is_ter = True
+            pdb_data.models[self.__current_model].chains[0].residues[-1].end_of_chain = True
         elif line.startswith("ANISOU"):
             u_list = parse_anisou(line)
-            pdb_data.models[-1].chains[-1].residues[-1].atoms[-1].temp_factor = u_list
+            pdb_data.models[self.__current_model].chains[0].residues[-1].atoms[-1].temp_factor = [
+                u * unit_config.conversion_factor ** 2 for u in u_list
+            ]
 
     def __parse_heterogen_section(self, line, pdb_data):
         heterogen = pdb_data.heterogen
+
         def check_het_id(het_id):
             if het_id not in heterogen:
                 heterogen[het_id] = Heterogen()
@@ -396,11 +417,12 @@ class PdbReader:
     def __parse_secondary_structure_section(self, line, pdb_data):
         if line.startswith("HELIX "):
             self.__validation_info["num_helix"] += 1
-            if pdb_data.secondary_structure.helix is None :
+            if pdb_data.secondary_structure.helix is None:
                 pdb_data.secondary_structure.helix = {}
             helix = pdb_data.secondary_structure.helix
-            helix_id, chain_id, init_seq_num, init_icode,\
-                end_res_num, end_icode, helix_class, comment = parse_helix(line)
+            helix_id, chain_id, init_seq_num, init_icode, \
+                end_res_num, end_icode, helix_class, comment = parse_helix(
+                    line)
             helix[helix_id] = Helix(
                 chain_id=chain_id,
                 init_seq_num=init_seq_num,
@@ -412,13 +434,13 @@ class PdbReader:
             )
         elif line.startswith("SHEET "):
             self.__validation_info["num_sheet"] += 1
-            if pdb_data.secondary_structure.sheet is None :
+            if pdb_data.secondary_structure.sheet is None:
                 pdb_data.secondary_structure.sheet = {}
             sheet = pdb_data.secondary_structure.sheet
-            sheet_id, init_chain_id, init_seq_num, init_icode,\
-            sense, cur_atom, cur_chain_id, cur_res_seq, cur_icode,\
-            prev_atom, prev_chain_id, prev_res_seq, prev_icode,\
-            end_chain_id, end_res_seq, end_icode = parse_sheet(line)
+            sheet_id, init_chain_id, init_seq_num, init_icode, \
+                sense, cur_atom, cur_chain_id, cur_res_seq, cur_icode, \
+                prev_atom, prev_chain_id, prev_res_seq, prev_icode, \
+                end_chain_id, end_res_seq, end_icode = parse_sheet(line)
             if sheet_id not in sheet:
                 sheet[sheet_id] = []
             sheet[sheet_id].append(SheetStrand(
@@ -442,8 +464,9 @@ class PdbReader:
     def __parse_connectivity_section(self, line, pdb_data):
         connectivity = pdb_data.connectivity
         if line.startswith("SSBOND"):
-            chain_id, seq_num, icode, chain_id2, seq_num2, icode2, sym1, sym2, distance = parse_ssbond(line)
-            safe_append(connectivity, "ss_bond", SsBond(
+            chain_id, seq_num, icode, chain_id2, seq_num2, icode2, sym1, sym2, distance = parse_ssbond(
+                line)
+            connectivity.ss_bond.append(SsBond(
                 chain_id_1=chain_id,
                 seq_num_1=seq_num,
                 icode_1=icode,
@@ -452,13 +475,13 @@ class PdbReader:
                 icode_2=icode2,
                 symmetry_operation_1=sym1,
                 symmetry_operation_2=sym2,
-                distance=distance,
+                distance=distance * unit_config.conversion_factor,
             ))
         elif line.startswith("LINK  "):
-            name1, alt_loc1, _, chain_id1, res_seq1, icode1,\
-            name2, alt_loc2, _, chain_id2, res_seq2, icode2,\
-            sym1, sym2, length = parse_link(line)
-            safe_append(connectivity, "link", Link(
+            name1, alt_loc1, _, chain_id1, res_seq1, icode1, \
+                name2, alt_loc2, _, chain_id2, res_seq2, icode2, \
+                sym1, sym2, length = parse_link(line)
+            connectivity.link.append(Link(
                 name_1=name1,
                 alt_loc_1=alt_loc1,
                 chain_id_1=chain_id1,
@@ -469,13 +492,13 @@ class PdbReader:
                 chain_id_2=chain_id2,
                 seq_num_2=res_seq2,
                 icode_2=icode2,
-                distance=length,
+                distance=length * unit_config.conversion_factor,
             ))
         elif line.startswith("CISPEP"):
-            chain_id1, seq_num1, icode1,\
-            chain_id2, seq_num2, icode2,\
-            num_model, measure = parse_cispep(line)
-            safe_append(connectivity, "cis_peptide", CisPeptide(
+            chain_id1, seq_num1, icode1, \
+                chain_id2, seq_num2, icode2, \
+                num_model, measure = parse_cispep(line)
+            connectivity.cis_peptide.append(CisPeptide(
                 chain_id_1=chain_id1,
                 seq_num_1=seq_num1,
                 icode_1=icode1,
@@ -508,32 +531,45 @@ class PdbReader:
     def __parse_crystallographic_section(self, line, pdb_data):
         crystallographic = pdb_data.crystallographic
         if line.startswith("CRYST1"):
-            a, b, c, alpha, beta, gamma, s_group, z  = parse_cryst1(line)
-            crystallographic.cell_lengths = [a, b, c]
-            crystallographic.cell_angles = [alpha, beta, gamma]
-            crystallographic.space_group = s_group
-            crystallographic.z = z
+            a, b, c, alpha, beta, gamma, s_group, z = parse_cryst1(line)
+            if (a, b, c, alpha, beta, gamma, s_group, z) == (1.0, 1.0, 1.0, 90.0, 90.0, 90.0, "P1", 1):
+                pdb_data.crystallographic.fake_crystallographic = True
+            else:
+                crystallographic.cell_lengths = [
+                    a * unit_config.conversion_factor,
+                    b * unit_config.conversion_factor,
+                    c * unit_config.conversion_factor,
+                ]
+                crystallographic.cell_angles = [alpha, beta, gamma]
+                crystallographic.space_group = s_group
+                crystallographic.z = z
         elif line.startswith("ORIGX"):
             self.__validation_info["num_xform"] += 1
             o1, o2, o3, t = parse_matrix_line(line)
-            safe_append(crystallographic, "origin_matrix", [o1, o2, o3, t])
+            t = t * unit_config.conversion_factor
+            crystallographic.origin_matrix.append([o1, o2, o3, t])
         elif line.startswith("SCALE"):
             self.__validation_info["num_xform"] += 1
             o1, o2, o3, t = parse_matrix_line(line)
-            safe_append(crystallographic, "scale_matrix", [o1, o2, o3, t])
+            o1 = o1 / unit_config.conversion_factor
+            o2 = o2 / unit_config.conversion_factor
+            o3 = o3 / unit_config.conversion_factor
+            crystallographic.scale_matrix.append([o1, o2, o3, t])
         elif line.startswith("MTRIX"):
             self.__validation_info["num_xform"] += 1
             o1, o2, o3, t, i_given = parse_ncs_matrix_line(line)
-            if crystallographic.ncs_matrix is None or len(crystallographic.ncs_matrix[-1].matrix) == 3:
-                safe_append(crystallographic, "ncs_matrix", NcsMatrix(
+            t = t * unit_config.conversion_factor
+            if len(crystallographic.ncs_matrix) == 0 or\
+                len(crystallographic.ncs_matrix[-1].matrix) == 3:
+                crystallographic.ncs_matrix.append(NcsMatrix(
                     matrix=[],
                     given=i_given == 1
                 ))
-            safe_append(crystallographic.ncs_matrix[-1], "matrix", [o1, o2, o3, t])
+            crystallographic.ncs_matrix[-1].matrix.append([o1, o2, o3, t])
 
     def __parse_bookkeeping_section(self, line, pdb_data):
         if line.startswith("MASTER"):
-            num_remark, num_het, num_helix, num_sheet, num_site, num_xform,\
+            num_remark, num_het, num_helix, num_sheet, num_site, num_xform, \
                 num_coord, num_ter, num_conect, num_seq = parse_master(line)
             pdb_data._validation_info = {
                 "num_remark": num_remark,

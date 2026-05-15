@@ -740,5 +740,5 @@ def gen_anisou(
         f"{element:>2}{gen_charge(charge):>2}"
     ]
 
-def gen_ter(atom_no, residue_name, chain_id, residue_id):
-    return [f'TER   {atom_no:>5}      {residue_name:>3} {chain_id}{residue_id:>4}']
+def gen_ter(atom_no, residue_name, chain_id, residue_id, icode):
+    return [f'TER   {atom_no:>5}      {residue_name:>3} {chain_id}{residue_id:>4}{icode:1}']

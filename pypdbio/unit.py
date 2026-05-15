@@ -6,7 +6,7 @@ import warnings
 
 class UnitConfig:
     def __init__(self) -> None:
-        unit = os.getenv("PYPDBIO_UNIT", "A")
+        unit = os.getenv("PYPDBIO_UNIT", "nm")
         self.set_unit(unit)
 
     def set_unit(self, unit):

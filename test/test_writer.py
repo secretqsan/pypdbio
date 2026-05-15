@@ -1054,9 +1054,9 @@ class TestPdbCoordinateWriter(unittest.TestCase):
 
     def test_ter_generator(self):
         self.assertEqual(
-            gen_ter(1, "ALA", "A", 1),
+            gen_ter(1, "ALA", "A", 1, ""),
             [
-                "TER       1      ALA A   1",
+                "TER       1      ALA A   1 ",
             ],
         )
 
@@ -1126,7 +1126,7 @@ class TestPdbBookkeepingWriter(unittest.TestCase):
         with write_temp_pdb(pdb_data, 0, 1) as content:
             self.assertEqual(
                 content,
-                "MASTER       40    0    0    0    0    0    0    0    0    0    0    0          \n"
+                "MASTER        0    0    0    0    0    0    0    0    0    0    0    0          \n"
             )
 
 if __name__ == "__main__":

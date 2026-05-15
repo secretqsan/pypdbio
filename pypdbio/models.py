@@ -2,7 +2,7 @@
 # pylint: disable=missing-function-docstring
 # pylint: disable=protected-access
 from math import pi
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .utils import index_of_chain_id, chain_id_of_index
 
@@ -21,9 +21,9 @@ class JournalInfo:
     """
     PDB journal information class.
     """
-    author: list[str] = None
+    author: list[str] = field(default_factory=list)
     title: str = ""
-    editor: list[str] = None
+    editor: list[str] = field(default_factory=list)
     journal: str = ""
     volume: str = ""
     pages: str = ""
@@ -41,7 +41,7 @@ class RevisionInfo:
     PDB revision information class.
     """
     date: str = ""
-    modifications: list[str] = None
+    modifications: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -50,7 +50,7 @@ class ReplaceInfo:
     PDB replace information class.
     """
     date: str = ""
-    ids: list[str] = None
+    ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -61,19 +61,19 @@ class PdbMetaData:
     classification: str = ""
     date: str = ""
     pdb_id: str = ""
-    author: list[str] = None
-    split: list[str] = None
-    obsolete: dict = None
+    author: list[str] = field(default_factory=list)
+    split: list[str] = field(default_factory=list)
+    obsolete: ObsoleteInfo = None
     caveat: str = ""
-    compounds: list[dict] = None
-    keywords: list[str] = None
-    experiment: list[str] = None
+    compounds: list[dict] = field(default_factory=list)
+    keywords: list[str] = field(default_factory=list)
+    experiment: list[str] = field(default_factory=list)
     model_type: str = ""
     title = ""
-    revisions: list[RevisionInfo] = None
+    revisions: list[RevisionInfo] = field(default_factory=list)
     replace: ReplaceInfo = None
     journal: JournalInfo = None
-    remark: dict = None
+    remark: dict = field(default_factory=dict)
     _compound_text: str = ""
     _source_text: str = ""
 
@@ -83,29 +83,30 @@ class CrystalInfo:
     """
     PDB Crystal information class.
     """
-    space_group: str = ""
-    cell_angles: list[float] = None
-    cell_lengths: list[float] = None
+    space_group: str = "P 1"
+    fake_crystallographic: bool = False
+    cell_angles: list[float] = field(default_factory=list)
+    cell_lengths: list[float] = field(default_factory=list)
     z: int = 1
-    origin_matrix: list[list[float]] = None
-    scale_matrix: list[list[float]] = None
-    ncs_matrix: list[list[list[float]]] = None
+    origin_matrix: list[list[float]] = field(default_factory=list)
+    scale_matrix: list[list[float]] = field(default_factory=list)
+    ncs_matrix: list[list[list[float]]] = field(default_factory=list)
 
 
 @dataclass
 class ConnectivityInfo:
     """Connectivity information class."""
-    ss_bond: list[str] = None
-    link: list[str] = None
-    cis_peptide: list[str] = None
-    connections: dict = None
+    ss_bond: list[str] = field(default_factory=list)
+    link: list[str] = field(default_factory=list)
+    cis_peptide: list[str] = field(default_factory=list)
+    connections: dict = field(default_factory=dict)
 
 
 @dataclass
 class SecondaryStructureInfo:
     """Secondary structure information class."""
-    helix: dict = None
-    sheet: dict = None
+    helix: dict = field(default_factory=dict)
+    sheet: dict = field(default_factory=dict)
 # secondary structure class
 
 
@@ -160,7 +161,7 @@ class Heterogen:
     comment: str = ""
     _alias_text: str = ""
     formula: str = ""
-    alias: list[str] = None
+    alias: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -205,15 +206,15 @@ class ResidueModificationInfo:
 class SequenceInfo:
     """Sequence information class."""
     sequence_db: SequenceDBInfo = None
-    sequence: list[str] = None
-    sequence_differences: list[SequenceDifferenceInfo] = None
-    residue_modifications: list[ResidueModificationInfo] = None
+    sequence: list[str] = field(default_factory=list)
+    sequence_differences: list[SequenceDifferenceInfo] = field(default_factory=list)
+    residue_modifications: list[ResidueModificationInfo] = field(default_factory=list)
 
 
 @dataclass
 class NcsMatrix:
     """NCS matrix information class."""
-    matrix: list[list[float]] = None
+    matrix: list[list[float]] = field(default_factory=list)
     given: bool = False
 
 
@@ -294,8 +295,6 @@ class IterableParentBase:
         for child in self._children:
             if should_increase_id_fn(child, value):
                 index += 1
-            else:
-                break
             if id(child) == id(value):
                 break
         return index

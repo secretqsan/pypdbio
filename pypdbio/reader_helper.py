@@ -1,17 +1,6 @@
 # pylint: disable=missing-function-docstring
 """field parser functions"""
 # Helper functions
-def safe_append(obj, attribute, item):
-    if getattr(obj, attribute) is None:
-        setattr(obj, attribute, [])
-    getattr(obj, attribute).append(item)
-
-
-def safe_extend(obj, attribute, item):
-    if getattr(obj, attribute) is None:
-        setattr(obj, attribute, [])
-    getattr(obj, attribute).extend(item)
-
 
 def parse_int_value(value):
     value = value.strip()
