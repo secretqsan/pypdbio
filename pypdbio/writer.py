@@ -10,7 +10,6 @@ from .models import (
     Chain,
     Site,
 )
-from .unit import unit_config
 from .utils import chain_id_of_index
 
 
@@ -34,9 +33,9 @@ class PdbWriter:
             f.write(
                 warp_lines(
                     gen_obslte(
+                        meta.obsolete.replace_date,
                         meta.obsolete.new_entry_id,
-                        meta.obsolete.old_entry_id,
-                        meta.obsolete.pdb_id
+                        meta.pdb_id,
                     )
                 )
             )
@@ -84,9 +83,13 @@ class PdbWriter:
                     revision.modifications,
                 )))
         if meta.replace:
-            f.write(warp_lines(gen_sprsde(meta.replace, meta.pdb_id)))
+            f.write(warp_lines(gen_sprsde(
+                meta.replace.date,
+                meta.pdb_id,
+                meta.replace.ids or [],
+            )))
         if meta.journal:
-            if len(meta.journal.author) > 0:
+            if meta.journal.author and len(meta.journal.author) > 0:
                 f.write(warp_lines(gen_jrnl_auth(meta.journal.author)))
             if meta.journal.title:
                 f.write(warp_lines(gen_jrnl_titl(meta.journal.title)))
@@ -131,10 +134,11 @@ class PdbWriter:
             else:
                 chain_id = chain.id
                 occupied_chain_ids.append(chain_id)
-            dbref_dict[chain_id] = chain.sequence_info.sequence_db
-            seqadv_dict[chain_id] = chain.sequence_info.sequence_differences
-            seq_dict[chain_id] = chain.sequence_info.sequence
-            modres_dict[chain_id] = chain.sequence_info.residue_modifications
+            if chain.sequence_info is not None:
+                dbref_dict[chain_id] = chain.sequence_info.sequence_db
+                seqadv_dict[chain_id] = chain.sequence_info.sequence_differences
+                seq_dict[chain_id] = chain.sequence_info.sequence
+                modres_dict[chain_id] = chain.sequence_info.residue_modifications
 
         if dbref_dict != {}:
             for chain_id, dbref in dbref_dict.items():
@@ -194,23 +198,23 @@ class PdbWriter:
                     ))
 
     def __write_heterogen_section(self, pdb_data, f):
+        if len(pdb_data.models) > 0:
+            for chain in pdb_data.models[0]:
+                for residue in chain.residues:
+                    if residue.het:
+                        het_id = residue.name
+                        if het_id == "HOH" or residue.solvent:
+                            continue
+                        het = pdb_data.heterogen[het_id]
+                        f.write(warp_lines(gen_het(
+                            het_id,
+                            chain.id,
+                            residue.id,
+                            residue.icode,
+                            len(residue),
+                            het.comment,
+                        )))
         for het_id, het in pdb_data.heterogen.items():
-            het_rec = {
-                "het_id": het_id,
-                "chain_id": getattr(het, "chain_id", " ") or " ",
-                "seq_num": getattr(het, "seq_num", None),
-                "icode": getattr(het, "icode", "") or "",
-                "num_het_atoms": getattr(het, "num_het_atoms", None),
-                "text": getattr(het, "comment", "") or "",
-            }
-            f.write(warp_lines(gen_het(
-                het_rec["het_id"],
-                het_rec["chain_id"],
-                het_rec["seq_num"],
-                het_rec["icode"],
-                het_rec["num_het_atoms"],
-                het_rec["text"],
-            )))
             if getattr(het, "name", ""):
                 f.write(warp_lines(gen_hetnam(het_id, het.name)))
             alias_src = getattr(het, "_alias_text", None) or getattr(
@@ -222,140 +226,126 @@ class PdbWriter:
                     hetsyn_text = str(alias_src)
                 f.write(warp_lines(gen_hetsyn(het_id, hetsyn_text)))
             if getattr(het, "formula", ""):
-                formul_rec = {
-                    "comp_num": getattr(het, "formula_comp_num", 1),
-                    "het_id": het_id,
-                    "continuation": getattr(het, "formula_continuation", 0),
-                    "asterisk": getattr(het, "formula_asterisk", "") or " ",
-                    "text": het.formula,
-                }
-                f.write(warp_lines(gen_formul(
-                    formul_rec["comp_num"],
-                    formul_rec["het_id"],
-                    formul_rec["continuation"],
-                    formul_rec["asterisk"],
-                    formul_rec["text"],
-                )))
+                comp_num = getattr(het, "formula_comp_num", 1)
+                f.write(warp_lines(gen_formul(comp_num, het_id, het.formula)))
 
     def __write_secondary_structure_section(self, pdb_data, f):
         secondary = pdb_data.secondary_structure
         if secondary.helix:
+            model = pdb_data.models[0]
             for serial, (hid, hx) in enumerate(secondary.helix.items(), start=1):
-                d = helix_to_writer_dict(hid, hx, serial)
+                length = abs(hx.end_seq_num - hx.init_seq_num) + 1
                 f.write(warp_lines(gen_helix(
-                    d["ser_num"],
-                    d["helix_id"],
-                    d["init_res_name"],
-                    d["init_chain_id"],
-                    d["init_seq_num"],
-                    d["init_icode"],
-                    d["end_res_name"],
-                    d["end_chain_id"],
-                    d["end_seq_num"],
-                    d["end_icode"],
-                    d["helix_class"],
-                    d["comment"],
-                    d["length"],
+                    serial,
+                    hid,
+                    model[hx.chain_id][f"{hx.init_seq_num}{hx.init_icode:1}"].name,
+                    hx.chain_id,
+                    hx.init_seq_num,
+                    hx.init_icode,
+                    model[hx.chain_id][f"{hx.end_seq_num}{hx.end_icode:1}"].name,
+                    hx.chain_id,
+                    hx.end_seq_num,
+                    hx.end_icode,
+                    hx.helix_class,
+                    hx.comment,
+                    length,
                 )))
         if secondary.sheet:
+            model = pdb_data.models[0]
             for sid, strands in secondary.sheet.items():
                 n = len(strands)
                 for i, strand in enumerate(strands, start=1):
-                    d = sheet_strand_to_writer_dict(sid, strand, i, n)
+                    cur_rs = (
+                        strand.cur_res_seq
+                        if strand.cur_res_seq is not None else 0)
+                    prev_rs = (
+                        strand.prev_res_seq
+                        if strand.prev_res_seq is not None else 0)
                     f.write(warp_lines(gen_sheet(
-                        d["strand"],
-                        d["sheet_id"],
-                        d["num_strands"],
-                        d["init_res_name"],
-                        d["init_chain_id"],
-                        d["init_seq_num"],
-                        d["init_icode"],
-                        d["end_res_name"],
-                        d["end_chain_id"],
-                        d["end_seq_num"],
-                        d["end_icode"],
-                        d["sense"],
-                        d["cur_atom"],
-                        d["cur_res_name"],
-                        d["cur_chain_id"],
-                        d["cur_res_seq"],
-                        d["cur_icode"],
-                        d["prev_atom"],
-                        d["prev_res_name"],
-                        d["prev_chain_id"],
-                        d["prev_res_seq"],
-                        d["prev_icode"],
+                        i,
+                        sid,
+                        n % 100,
+                        model[strand.init_chain_id][f"{strand.init_seq_num}{strand.init_icode:1}"].name,
+                        strand.init_chain_id,
+                        strand.init_seq_num,
+                        strand.init_icode,
+                        model[strand.end_chain_id][f"{strand.end_res_seq}{strand.end_icode:1}"].name,
+                        strand.end_chain_id,
+                        strand.end_res_seq,
+                        strand.end_icode,
+                        strand.sense,
+                        strand.cur_atom,
+                        model[strand.cur_chain_id][f"{cur_rs}{strand.cur_icode:1}"].name if cur_rs != 0 else "",
+                        strand.cur_chain_id,
+                        cur_rs,
+                        strand.cur_icode,
+                        strand.prev_atom,
+                        model[strand.prev_chain_id][f"{prev_rs}{strand.prev_icode:1}"].name if prev_rs != 0 else "",
+                        strand.prev_chain_id,
+                        prev_rs,
+                        strand.prev_icode,
                     )))
 
     def __write_connectivity_section(self, pdb_data, f):
         conn = pdb_data.connectivity
         for i, ssbond in enumerate(conn.ss_bond or [], start=1):
-            d = ssbond_to_writer_dict(i, ssbond)
+            sym1 = (ssbond.symmetry_operation_1 or "1555")[:6].rjust(6)
+            sym2 = (ssbond.symmetry_operation_2 or "1555")[:6].rjust(6)
             f.write(warp_lines(gen_ssbond(
-                d["ser_num"],
-                d["chain_id1"],
-                d["seq_num1"],
-                d["icode1"],
-                d["chain_id2"],
-                d["seq_num2"],
-                d["icode2"],
-                d["sym1"],
-                d["sym2"],
-                d["length"],
+                i,
+                ssbond.chain_id_1,
+                ssbond.seq_num_1,
+                ssbond.icode_1,
+                ssbond.chain_id_2,
+                ssbond.seq_num_2,
+                ssbond.icode_2,
+                sym1,
+                sym2,
+                ssbond.distance,
             )))
         for link in conn.link or []:
-            d = link_to_writer_dict(link)
             f.write(warp_lines(gen_link(
-                d["name1"],
-                d["alt_loc1"],
-                d["res_name1"],
-                d["chain_id1"],
-                d["res_seq1"],
-                d["icode1"],
-                d["name2"],
-                d["alt_loc2"],
-                d["res_name2"],
-                d["chain_id2"],
-                d["res_seq2"],
-                d["icode2"],
-                d["sym1"],
-                d["sym2"],
-                d["length"],
+                link.name_1,
+                link.alt_loc_1,
+                pdb_data.models[0][link.chain_id_1][f"{link.seq_num_1}{link.icode_1:1}"].name,
+                link.chain_id_1,
+                link.seq_num_1,
+                link.icode_1,
+                link.name_2,
+                link.alt_loc_2,
+                pdb_data.models[0][link.chain_id_2][f"{link.seq_num_2}{link.icode_2:1}"].name,
+                link.chain_id_2,
+                link.seq_num_2,
+                link.icode_2,
+                link.symmetry_operation_1,
+                link.symmetry_operation_2,
+                link.distance,
             )))
         for i, cispep in enumerate(conn.cis_peptide or [], start=1):
-            d = cispep_to_writer_dict(i, cispep)
             f.write(warp_lines(gen_cispep(
-                d["ser_num"],
-                d["pep1"],
-                d["chain_id1"],
-                d["seq_num1"],
-                d["icode1"],
-                d["pep2"],
-                d["chain_id2"],
-                d["seq_num2"],
-                d["icode2"],
-                d["mod_num"],
-                d["measure"],
+                i,
+                pdb_data.models[0][cispep.chain_id_1][f"{cispep.seq_num_1}{cispep.icode_1:1}"].name,
+                cispep.chain_id_1,
+                cispep.seq_num_1,
+                cispep.icode_1,
+                pdb_data.models[0][cispep.chain_id_2][f"{cispep.seq_num_2}{cispep.icode_2:1}"].name,
+                cispep.chain_id_2,
+                cispep.seq_num_2,
+                cispep.icode_2,
+                cispep.num_model,
+                cispep.measure,
             )))
 
     def __write_misc_feature_section(self, pdb_data, f):
         for site_id, site_list in pdb_data.sites.items():
             residues = []
             for s in site_list:
-                if isinstance(s, Site):
-                    residues.append({
-                        "res_name": "   ",
-                        "chain_id": s.chain_id or " ",
-                        "seq_num": s.seq_num,
-                        "icode": (s.icode or " ")[:1],
-                    })
-                else:
-                    residues.append({
-                        "res_name": s.get("res_name", "   "),
-                        "chain_id": s.get("chain_id", " "),
-                        "seq_num": s.get("seq_num"),
-                        "icode": s.get("icode", " "),
-                    })
+                residues.append({
+                    "res_name": pdb_data.models[0][s.chain_id][f"{s.seq_num}{s.icode:1}"].name,
+                    "chain_id": s.chain_id,
+                    "seq_num": s.seq_num,
+                    "icode": s.icode,
+                })
             f.write(warp_lines(gen_site(site_id, residues)))
 
     def __write_crystallographic_section(self, pdb_data, f):
@@ -381,15 +371,27 @@ class PdbWriter:
         if crystal.origin_matrix:
             f.write(warp_lines(gen_matrix_rows("ORIGX", crystal.origin_matrix)))
         if crystal.scale_matrix:
-            f.write(warp_lines(gen_scale_matrix_rows(
-                "SCALE", crystal.scale_matrix)))
+            f.write(warp_lines(gen_matrix_rows("SCALE", crystal.scale_matrix)))
         if crystal.ncs_matrix:
-            f.write(warp_lines(gen_ncs_matrix(crystal.ncs_matrix)))
+            for i, ncs in enumerate(crystal.ncs_matrix, start=1):
+                f.write(warp_lines(gen_ncs_matrix(
+                    i, ncs.matrix, 1 if ncs.given else 0)))
 
     def __write_conect_section(self, pdb_data, f):
-        conn = pdb_data.connectivity
-        if conn.connections:
-            f.write(warp_lines(gen_conect(conn.connections)))
+        if pdb_data.connectivity.connections is None:
+            return
+        connections_with_dup = {}
+        for atom1, bonded_atoms in pdb_data.connectivity.connections.items():
+            for atom2 in bonded_atoms:
+                if atom1 not in connections_with_dup:
+                    connections_with_dup[atom1] = []
+                connections_with_dup[atom1].append(atom2)
+                if atom2 not in connections_with_dup:
+                    connections_with_dup[atom2] = []
+                connections_with_dup[atom2].append(atom1)
+        for atom1 in sorted(connections_with_dup.keys()):
+            bonded_atoms = sorted(set(connections_with_dup[atom1]))
+            f.write(warp_lines(gen_conect(atom1, bonded_atoms)))
 
     @singledispatchmethod
     def write(self, data):
@@ -414,12 +416,6 @@ class PdbWriter:
         model.add_chain(data)
         self.write(model)
 
-    def _gen_ter_line(self, last_atom_info):
-        line = f'TER   {last_atom_info["atom_no"]:>5}      '
-        line += f'{last_atom_info["residue_name"]:>3} {last_atom_info["chain_id"]}'
-        line += f'{last_atom_info["residue_id"]:>4} \n'
-        return line
-
     def __write_coordinate_section(self, pdb_data, f):
         last_atom_info = {}
         for model_id, model in enumerate(pdb_data.models):
@@ -430,37 +426,98 @@ class PdbWriter:
             for chain in model.chains:
                 chain_id = getattr(chain, "id", None) or "A"
                 for residue in chain.residues:
-                    atom_typ = "HETATM" if getattr(
-                        residue, "het", "") == "het" else "ATOM"
+                    atom_typ = "HETATM" if residue.het else "ATOM"
                     for atom in residue.atoms:
                         atom_info = {
                             "type": atom_typ,
                             "atom_no": atom_id,
                             "atom_name": atom.name,
+                            "alt_loc": atom.alt_loc,
                             "residue_name": residue.name,
                             "chain_id": chain_id,
                             "residue_id": residue_id,
+                            "icode": residue.icode,
                             "coord_x": atom.coord[0],
                             "coord_y": atom.coord[1],
                             "coord_z": atom.coord[2],
                             "temp_factor": atom.temp_factor,
                             "element": atom.element,
                             "charge": atom.charge,
-                            "occupancy": getattr(atom, "occupancy", 1.0),
+                            "occupancy": atom.occupancy,
                         }
                         if last_atom_info.get('type') == 'ATOM' and atom_info["type"] == 'HETATM':
-                            f.write(self._gen_ter_line(last_atom_info))
-                        f.write(self._gen_atom_line(atom_info))
+                            f.write(warp_lines(gen_ter(
+                                last_atom_info["atom_no"],
+                                last_atom_info["residue_name"],
+                                last_atom_info["chain_id"],
+                                last_atom_info["residue_id"],
+                            )))
+                        f.write(warp_lines(
+                            gen_atom(
+                                atom_info["type"],
+                                atom_info["atom_no"],
+                                atom_info["atom_name"],
+                                atom_info["alt_loc"],
+                                atom_info["residue_name"],
+                                atom_info["chain_id"],
+                                atom_info["residue_id"],
+                                atom_info["icode"],
+                                atom_info["coord_x"],
+                                atom_info["coord_y"],
+                                atom_info["coord_z"],
+                                atom_info["occupancy"],
+                                atom_info["temp_factor"],
+                                atom_info["element"],
+                                atom_info["charge"],
+                            )))
+                        if atom.anisotropic_temp_factor:
+                            f.write(warp_lines(gen_anisou(
+                                atom_id,
+                                atom.name,
+                                atom.alt_loc,
+                                residue.name,
+                                chain_id,
+                                residue_id,
+                                residue.icode,
+                                atom.anisotropic_temp_factor[0],
+                                atom.anisotropic_temp_factor[1],
+                                atom.anisotropic_temp_factor[2],
+                                atom.anisotropic_temp_factor[3],
+                                atom.anisotropic_temp_factor[4],
+                                atom.anisotropic_temp_factor[5],
+                                atom.element,
+                                atom.charge,
+                            )))
                         last_atom_info = atom_info
                         atom_id += 1
                     residue_id += 1
+
                 if last_atom_info.get("type") == "ATOM":
-                    f.write(self._gen_ter_line(last_atom_info))
+                    f.write(warp_lines(
+                        gen_ter(
+                            last_atom_info["atom_no"],
+                            last_atom_info["residue_name"],
+                            last_atom_info["chain_id"],
+                            last_atom_info["residue_id"],
+                        )
+                    ))
             if len(pdb_data.models) > 1:
                 f.write("ENDMDL\n")
 
     def __write_bookkeeping_section(self, pdb_data, f):
-        f.write(warp_lines(gen_master(getattr(pdb_data, "_validation_info", None))))
+        vi = getattr(pdb_data, "_validation_info", None) or {}
+        f.write(warp_lines(gen_master(
+            vi.get("num_remark", 0),
+            vi.get("num_het", 0),
+            vi.get("num_helix", 0),
+            vi.get("num_sheet", 0),
+            vi.get("num_site", 0),
+            vi.get("num_xform", 0),
+            vi.get("num_coord", 0),
+            vi.get("num_ter", 0),
+            vi.get("num_conect", 0),
+            vi.get("num_seq", 0),
+        )))
         f.write(warp_lines(["END"]))
 
     @write.register(PdbData)
@@ -468,11 +525,11 @@ class PdbWriter:
         with open(self.pdb_path, "w", encoding="utf-8") as f:
             self.__write_header_section(data, f)
             self.__write_primary_structure_section(data, f)
-            # self.__write_heterogen_section(data, f)
-            # self.__write_secondary_structure_section(data, f)
-            # self.__write_connectivity_section(data, f)
-            # self.__write_misc_feature_section(data, f)
-            # self.__write_crystallographic_section(data, f)
-            # self.__write_coordinate_section(data, f)
-            # self.__write_conect_section(data, f)
-            # self.__write_bookkeeping_section(data, f)
+            self.__write_heterogen_section(data, f)
+            self.__write_secondary_structure_section(data, f)
+            self.__write_connectivity_section(data, f)
+            self.__write_misc_feature_section(data, f)
+            self.__write_crystallographic_section(data, f)
+            self.__write_coordinate_section(data, f)
+            self.__write_conect_section(data, f)
+            self.__write_bookkeeping_section(data, f)

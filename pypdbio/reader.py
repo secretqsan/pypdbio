@@ -351,8 +351,8 @@ class PdbReader:
             if residue_id != self.__current_residue_id:
                 self.__current_residue_id = residue_id
                 pdb_data.models[self.__current_model].chains[-1].add_residue(Residue(res_name))
-                mol_type = "het" if typ == "HETATM" else "std"
-                pdb_data.models[self.__current_model].chains[-1].residues[-1].het = mol_type
+                is_het = True if typ == "HETATM" else False
+                pdb_data.models[self.__current_model].chains[-1].residues[-1].het = is_het
                 pdb_data.models[self.__current_model].chains[-1].residues[-1].icode = icode
             pdb_data.models[-1].chains[-1].residues[-1].add_atom(Atom(
                 name=atom_name,

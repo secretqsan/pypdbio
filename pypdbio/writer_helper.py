@@ -8,8 +8,12 @@ from .models import *
 # helper functions
 
 
-def gen_fixed_length_list(lst, width, n):
-    target_list = [lst[i: i + n] for i in range(0, len(lst), n)]
+def gen_fixed_length_list(lst, n):
+    return [lst[i: i + n] for i in range(0, len(lst), n)]
+
+
+def gen_fixed_length_list_str(lst, width, n):
+    target_list = gen_fixed_length_list(lst, n)
     result = [
         "".join(f"{item.strip():<{width}}" for item in item_chunk)
         for item_chunk
@@ -94,7 +98,8 @@ def gen_line_from_template(template, fields_template):
             if value.get("no_repetition", False) and i > 0:
                 fields[field] = ""
             elif value.get("continuous_id", False):
-                fields[field] = "" if i == 0 and value.get("hide_first", True) else i + 1
+                fields[field] = "" if i == 0 and value.get(
+                    "hide_first", True) else i + 1
             elif field == split_field:
                 fields[field] = sub_str
             else:
@@ -144,7 +149,7 @@ def gen_title(title):
 
 
 def gen_split(split_ids):
-    text = gen_fixed_length_list(split_ids, 5, 14)
+    text = gen_fixed_length_list_str(split_ids, 5, 14)
     return gen_line_from_template(
         "SPLIT   {continuation:>2} {split_ids:<69}",
         {
@@ -261,13 +266,13 @@ def gen_revdat(serial, date, pdb_id, mod_type, mods):
             "date": {"value": date},
             "pdb_id": {"value": pdb_id},
             "mod_type": {"value": mod_type},
-            "mods": {"value": gen_fixed_length_list(mods, 7, 4)[0]},
+            "mods": {"value": gen_fixed_length_list_str(mods, 7, 4)[0]},
         },
     )
 
 
 def gen_sprsde(date, pdb_id, replace_pdb_id_list):
-    ids_str_list = gen_fixed_length_list(replace_pdb_id_list, 5, 9)
+    ids_str_list = gen_fixed_length_list_str(replace_pdb_id_list, 5, 9)
     return gen_line_from_template(
         "SPRSDE  {continuation:>2} {date:>9} {pdb_id:>4}      {ids}",
         {
@@ -466,25 +471,26 @@ def gen_dbref(
             f"{db_seq_begin:>10}  {db_seq_end:>10}"
         return [line1, line2]
     return [
-        f"DBREF  {id_code:>4} {chain_id} {seq_begin:>4}{insert_begin:>1} " + \
-        f"{seq_end:>4}{insert_end:>1} {database:<6} {db_accession:<8} " + \
-        f"{db_id_code:<12} {db_seq_begin:>5}{db_ins_begin:>1} " + \
+        f"DBREF  {id_code:>4} {chain_id} {seq_begin:>4}{insert_begin:>1} " +
+        f"{seq_end:>4}{insert_end:>1} {database:<6} {db_accession:<8} " +
+        f"{db_id_code:<12} {db_seq_begin:>5}{db_ins_begin:>1} " +
         f"{db_seq_end:>5}{db_ins_end:>1}"
     ]
+
 
 def gen_seqadv(
     id_code, res_name, chain_id, seq_num, icode,
     database, db_accession, db_res, db_seq, conflict
 ):
     return [
-        f"SEQADV {id_code:>4} {res_name:<3} {chain_id:1} {seq_num:>4}{icode:>1} " + \
-        f"{database:<4} {db_accession:<9} {db_res:<3} " + \
+        f"SEQADV {id_code:>4} {res_name:<3} {chain_id:1} {seq_num:>4}{icode:>1} " +
+        f"{database:<4} {db_accession:<9} {db_res:<3} " +
         f"{" " if db_seq is None else db_seq:>5} {conflict:<21}"
     ]
 
 
 def gen_seqres(chain_id, residues):
-    seq_str = gen_fixed_length_list(residues, 4, 13)
+    seq_str = gen_fixed_length_list_str(residues, 4, 13)
     return gen_line_from_template(
         "SEQRES {index:>3} {chain_id:1} {num_res:>4}  {residues:<52}",
         {
@@ -502,14 +508,14 @@ def gen_seqres(chain_id, residues):
 
 def gen_modres(id_code, res_name, chain_id, seq_num, icode, std_res, comment):
     return [
-        f"MODRES {id_code:>4} {res_name:<3} {chain_id:1} {seq_num:>4}{icode:1} " + \
+        f"MODRES {id_code:>4} {res_name:<3} {chain_id:1} {seq_num:>4}{icode:1} " +
         f"{std_res:<3}  {comment:<41}"
     ]
 
 
 def gen_het(het_id, chain_id, seq_num, icode, num_het_atoms, text):
     return [
-        f"HET   {het_id:>3} {chain_id:1} {seq_num:>4}{icode:1} {num_het_atoms:>5} {text:<40}"
+        f"HET    {het_id:<3}  {chain_id:1}{seq_num:>4}{icode:1}  {num_het_atoms:>5}     {text:<40}"
     ]
 
 
@@ -535,10 +541,17 @@ def gen_hetsyn(het_id, text):
     )
 
 
-def gen_formul(comp_num, het_id, continuation, asterisk, text):
-    return [
-        f"FORMUL {comp_num:>2} {het_id:>3} {continuation:>2}{asterisk:1} {text:<51}"
-    ]
+def gen_formul(comp_num, het_id, text):
+    return gen_line_from_template(
+        "FORMUL  {comp_num:>2}  {het_id:>3} {continuation:>2}{asterisk:1}{text:<51}",
+        {
+            "comp_num": {"value": comp_num},
+            "het_id": {"value": het_id},
+            "continuation": {"continuous_id": True},
+            "asterisk": {"value": "*" if het_id == "HOH" else ""},
+            "text": {"value": text, "split": True, "kwargs": {"width": 51}},
+        },
+    )
 
 
 def gen_helix(
@@ -546,21 +559,18 @@ def gen_helix(
     end_res_name, end_chain_id, end_seq_num, end_icode, helix_class, comment, length
 ):
     return [
-        (
-            "HELIX "
-            f"{ser_num:>3}"
-            f" {helix_id:<3}"
-            f" {init_res_name:<3}"
-            f" {init_chain_id:1}"
-            f"{init_seq_num:>4}{init_icode:1}"
-            f" {end_res_name:<3}"
-            f" {end_chain_id:1}"
-            f"{end_seq_num:>4}{end_icode:1}"
-            f"{helix_class:>2}"
-            f"{comment:<30}"
-            f" {length:>5}"
-        )
+        f"HELIX  {ser_num:>3} {helix_id:>3} " +
+        f"{init_res_name:<3} {init_chain_id:1} {init_seq_num:>4}{init_icode:1} " +
+        f"{end_res_name:<3} {end_chain_id:1} {end_seq_num:>4}{end_icode:1}" +
+        f"{helix_class:>2}{comment:<30} {length:>5}"
     ]
+
+
+def gen_atom_name(atom_name):
+    idx = atom_name[0]
+    if idx.isdigit():
+        return atom_name
+    return f" {atom_name}"
 
 
 def gen_sheet(
@@ -569,80 +579,30 @@ def gen_sheet(
     cur_atom, cur_res_name, cur_chain_id, cur_res_seq, cur_icode,
     prev_atom, prev_res_name, prev_chain_id, prev_res_seq, prev_icode
 ):
+    prefix = f"SHEET  {strand:>3} {sheet_id:>3}{num_strands:>2} " + \
+        f"{init_res_name:<3} {init_chain_id:1}{init_seq_num:>4}{init_icode:1} " + \
+        f"{end_res_name:<3} {end_chain_id:1}{end_seq_num:>4}{end_icode:1}" + \
+        f"{sense:>2} "
+    if sense == 0:
+        registration = ""
+    else:
+        registration = f"{gen_atom_name(cur_atom):<4}{cur_res_name:>3} " + \
+            f"{cur_chain_id:1}{cur_res_seq:>4}{cur_icode:1} " + \
+            f"{gen_atom_name(prev_atom):<4}{prev_res_name:>3} " + \
+            f"{prev_chain_id:1}{prev_res_seq:>4}{prev_icode:1}"
     return [
-        f"SHEET {strand:>3} {sheet_id:<3} {num_strands:>2} {init_res_name:<3} {init_chain_id:1} {init_seq_num:>4}{init_icode:1} {end_res_name:<3} {end_chain_id:1} {end_seq_num:>4}{end_icode:1} {sense:>2} {cur_atom:<4} {cur_res_name:>3} {cur_chain_id:1} {cur_res_seq:>4}{cur_icode:1} {prev_atom:<4} {prev_res_name:>3} {prev_chain_id:1} {prev_res_seq:>4}{prev_icode:1}"
+        prefix + registration
     ]
-
-
-def helix_to_writer_dict(helix_id: str, hx: Helix, serial: int) -> dict:
-    length = abs((hx.end_seq_num or 0) - (hx.init_seq_num or 0)) + 1
-    return {
-        "ser_num": serial,
-        "helix_id": helix_id[:3].ljust(3),
-        "init_res_name": "   ",
-        "init_chain_id": hx.chain_id or " ",
-        "init_seq_num": hx.init_seq_num,
-        "init_icode": (hx.init_icode or " ")[:1],
-        "end_res_name": "   ",
-        "end_chain_id": hx.chain_id or " ",
-        "end_seq_num": hx.end_seq_num,
-        "end_icode": (hx.end_icode or " ")[:1],
-        "helix_class": hx.helix_class,
-        "comment": (hx.comment or "")[:30],
-        "length": length,
-    }
-
-
-def sheet_strand_to_writer_dict(sheet_id: str, strand: SheetStrand,
-                                strand_idx: int, num_strands: int) -> dict:
-    def rs(res_seq):
-        return res_seq if res_seq is not None else 0
-
-    return {
-        "strand": strand_idx,
-        "sheet_id": sheet_id[:3].ljust(3),
-        "num_strands": num_strands,
-        "init_res_name": "   ",
-        "init_chain_id": strand.init_chain_id or " ",
-        "init_seq_num": strand.init_seq_num,
-        "init_icode": (strand.init_icode or " ")[:1],
-        "end_res_name": "   ",
-        "end_chain_id": strand.end_chain_id or " ",
-        "end_seq_num": strand.end_res_seq,
-        "end_icode": (strand.end_icode or " ")[:1],
-        "sense": strand.sense,
-        "cur_atom": (strand.cur_atom or " ")[:4].ljust(4),
-        "cur_res_name": "   ",
-        "cur_chain_id": strand.cur_chain_id or " ",
-        "cur_res_seq": rs(strand.cur_res_seq),
-        "cur_icode": (strand.cur_icode or " ")[:1],
-        "prev_atom": (strand.prev_atom or " ")[:4].ljust(4),
-        "prev_res_name": "   ",
-        "prev_chain_id": strand.prev_chain_id or " ",
-        "prev_res_seq": rs(strand.prev_res_seq),
-        "prev_icode": (strand.prev_icode or " ")[:1],
-    }
 
 
 def gen_ssbond(
     ser_num, chain_id1, seq_num1, icode1, chain_id2, seq_num2, icode2,
     sym1, sym2, length
 ):
-    length_str = f"{length:5.2f}" if length is not None else " " * 5
     return [
-        (
-            "SSBOND "
-            f"{fmt_int(ser_num, 3)} CYS"
-            f" {chain_id1:1}"
-            f"{fmt_int(seq_num1, 4)}"
-            f"{icode1:1}"
-            f"   CYS"
-            f" {chain_id2:1}"
-            f"{fmt_int(seq_num2, 4)}"
-            f"{icode2:1}"
-            f"                        {sym1:>6}"
-            f" {sym2:>6} {length_str}"
-        )
+        f"SSBOND {ser_num:>3} CYS {chain_id1:1} {seq_num1:>4}{icode1:1}   " +
+        f"CYS {chain_id2:1} {seq_num2:>4}{icode2:1}                       " +
+        f"{sym1:>6} {sym2:>6} {length:5.2f}"
     ]
 
 
@@ -650,26 +610,12 @@ def gen_link(
     name1, alt_loc1, res_name1, chain_id1, res_seq1, icode1, name2, alt_loc2,
     res_name2, chain_id2, res_seq2, icode2, sym1, sym2, length
 ):
-    length_str = f"{length:5.2f}" if length is not None else " " * 5
     return [
-        (
-            "LINK        "
-            f"{name1:<4}"
-            f"{alt_loc1:1}"
-            f"{res_name1:>3}"
-            f" {chain_id1:1}"
-            f"{fmt_int(res_seq1, 4)}"
-            f"{icode1:1}"
-            f"               "
-            f"{name2:<4}"
-            f"{alt_loc2:1}"
-            f"{res_name2:>3}"
-            f" {chain_id2:1}"
-            f"{fmt_int(res_seq2, 4)}"
-            f"{icode2:1}"
-            f"  {sym1:>6}"
-            f" {sym2:>6} {length_str}"
-        )
+        f"LINK        {gen_atom_name(name1):<4}{alt_loc1:1}" +
+        f"{res_name1:>3} {chain_id1:1}{res_seq1:>4}{icode1:1}               " +
+        f"{gen_atom_name(name2):<4}{alt_loc2:1}" +
+        f"{res_name2:>3} {chain_id2:1}{res_seq2:>4}{icode2:1}  " +
+        f"{sym1:>6} {sym2:>6} {length:5.2f}"
     ]
 
 
@@ -677,264 +623,122 @@ def gen_cispep(
     ser_num, pep1, chain_id1, seq_num1, icode1,
     pep2, chain_id2, seq_num2, icode2, mod_num, measure
 ):
-    measure_str = f"{measure:6.2f}" if measure is not None else " " * 6
     return [
-        (
-            "CISPEP "
-            f"{fmt_int(ser_num, 3)}"
-            f" {pep1:<3}"
-            f" {chain_id1:1}"
-            f"{fmt_int(seq_num1, 4)}"
-            f"{icode1:1}"
-            f"   {pep2:<3}"
-            f" {chain_id2:1}"
-            f"{fmt_int(seq_num2, 4)}"
-            f"{icode2:1}"
-            f"       {fmt_int(mod_num, 3)}"
-            f"      {measure_str}"
-        )
+        f"CISPEP {ser_num:>3} {pep1:<3} {chain_id1:1} {seq_num1:>4}{icode1:1}   " +
+        f"{pep2:<3} {chain_id2:1} {seq_num2:>4}{icode2:1}       {mod_num:>3}       {measure:6.2f}"
     ]
-
-
-def ssbond_to_writer_dict(serial: int, sb: SsBond) -> dict:
-    return {
-        "ser_num": serial,
-        "chain_id1": sb.chain_id_1 or " ",
-        "seq_num1": sb.seq_num_1,
-        "icode1": (sb.icode_1 or " ")[:1],
-        "chain_id2": sb.chain_id_2 or " ",
-        "seq_num2": sb.seq_num_2,
-        "icode2": (sb.icode_2 or " ")[:1],
-        "sym1": sb.symmetry_operation_1 or "1555",
-        "sym2": sb.symmetry_operation_2 or "1555",
-        "length": sb.distance,
-    }
-
-
-def link_to_writer_dict(link: Link) -> dict:
-    return {
-        "name1": (link.name_1 or "")[:4].ljust(4),
-        "alt_loc1": (link.alt_loc_1 or " ")[:1],
-        "res_name1": "   ",
-        "chain_id1": link.chain_id_1 or " ",
-        "res_seq1": link.seq_num_1,
-        "icode1": (link.icode_1 or " ")[:1],
-        "name2": (link.name_2 or "")[:4].ljust(4),
-        "alt_loc2": (link.alt_loc_2 or " ")[:1],
-        "res_name2": "   ",
-        "chain_id2": link.chain_id_2 or " ",
-        "res_seq2": link.seq_num_2,
-        "icode2": (link.icode_2 or " ")[:1],
-        "sym1": "1555",
-        "sym2": "1555",
-        "length": link.distance,
-    }
-
-
-def cispep_to_writer_dict(serial: int, cp: CisPeptide) -> dict:
-    return {
-        "ser_num": serial,
-        "pep1": "   ",
-        "chain_id1": cp.chain_id_1 or " ",
-        "seq_num1": cp.seq_num_1,
-        "icode1": (cp.icode_1 or " ")[:1],
-        "pep2": "   ",
-        "chain_id2": cp.chain_id_2 or " ",
-        "seq_num2": cp.seq_num_2,
-        "icode2": (cp.icode_2 or " ")[:1],
-        "mod_num": cp.num_model,
-        "measure": cp.measure,
-    }
 
 
 def gen_site(site_id, residues):
-    num_res = len(residues)
-    chunks = [residues[i:i + 4] for i in range(0, len(residues), 4)] or [[]]
-    out = []
-    for index, chunk in enumerate(chunks, start=1):
-        line = f"SITE   {index:>3} {site_id:<3}{num_res:>2}"
-        for residue in chunk:
-            line += (
-                f" {residue.get('res_name', ''):>3}"
-                f" {residue.get('chain_id', ' '):1}"
-                f"{fmt_int(residue.get('seq_num'), 4)}"
-                f"{residue.get('icode', ' '):1}"
-            )
-        out.append(line)
-    return out
-
-
-def sites_to_site_records(site_id: str, sites: list) -> list:
-    """Build SITE lines from reader Site list (residue names omitted -> blank)."""
-    residues = []
-    for s in sites:
-        if isinstance(s, Site):
-            residues.append({
-                "res_name": "   ",
-                "chain_id": s.chain_id or " ",
-                "seq_num": s.seq_num,
-                "icode": (s.icode or " ")[:1],
-            })
-        else:
-            residues.append(s)
-    num_res = len(residues)
-    chunks = [residues[i:i + 4] for i in range(0, len(residues), 4)] or [[]]
-    out = []
-    for index, chunk in enumerate(chunks, start=1):
-        line = f"SITE   {index:>3} {site_id:<3}{num_res:>2}"
-        for residue in chunk:
-            line += (
-                f" {residue.get('res_name', '   '):>3}"
-                f" {residue.get('chain_id', ' '):1}"
-                f"{fmt_int(residue.get('seq_num'), 4)}"
-                f"{residue.get('icode', ' '):1}"
-            )
-        out.append(line)
-    return out
-
-
-def gen_cryst1(a, b, c, alpha, beta, gamma, s_group, z):
+    texts = [
+        f"{residue.get('res_name', ''):>3} {residue.get('chain_id', ' '):1}{residue.get('seq_num'):>4} {residue.get('icode', ' '):1} "
+        for residue
+        in residues
+    ]
+    texts = gen_fixed_length_list_str(texts, 11, 4)
     return gen_line_from_template(
-        "CRYST1{a:>9.3f}{b:>9.3f}{c:>9.3f}{alpha:>7.2f}{beta:>7.2f}{gamma:>7.2f} {s_group:<11}{z:>4}",
+        "SITE   {index:>3} {site_id:<3} {num_res:>2} {texts:<44}",
         {
-            "a": {"value": a},
-            "b": {"value": b},
-            "c": {"value": c},
-            "alpha": {"value": alpha},
-            "beta": {"value": beta},
-            "gamma": {"value": gamma},
-            "s_group": {"value": s_group},
-            "z": {"value": z}
-        }
+            "index": {"continuous_id": True, "hide_first": False},
+            "site_id": {"value": site_id},
+            "num_res": {"value": len(residues)},
+            "texts": {"value": texts, "split": True, "kwargs": {"prefix_space": False}},
+        },
     )
 
 
-def gen_matrix_rows(prefix, rows):
-    out = []
-    for n, row in enumerate(rows, start=1):
-        out.extend(gen_line_from_template(
-            "{prefix}{n}    {o1:10.6f}{o2:10.6f}{o3:10.6f}     {t_field:10.5f}",
-            {
-                "prefix": {"value": prefix},
-                "n": {"value": n},
-                "o1": {"value": row[0]},
-                "o2": {"value": row[1]},
-                "o3": {"value": row[2]},
-                "t_field": {"value": row[3]}
-            }
-        ))
-    return out
-
-
-def gen_scale_matrix_rows(prefix, rows):
-    out = []
-    for n, row in enumerate(rows, start=1):
-        out.extend(gen_line_from_template(
-            "{prefix}{n}    {o1:10.6f}{o2:10.6f}{o3:10.6f}     {t_field:10.5f}",
-            {
-                "prefix": {"value": prefix},
-                "n": {"value": n},
-                "o1": {"value": row[0]},
-                "o2": {"value": row[1]},
-                "o3": {"value": row[2]},
-                "t_field": {"value": row[3]}
-            }
-        ))
-    return out
-
-
-def gen_ncs_matrix(ncs_matrix):
-    out = []
-    for serial, block in enumerate(ncs_matrix, start=1):
-        if isinstance(block, NcsMatrix):
-            rows = block.matrix or []
-            given = block.given
-        else:
-            rows = block.get("matrix", [])
-            if "given" in block:
-                given = block["given"]
-            elif "calculated" in block:
-                given = block["calculated"]
-            else:
-                given = True
-        igiven = "1" if given else ""
-        for n, row in enumerate(rows, start=1):
-            out.extend(gen_line_from_template(
-                "MTRIX{n}{serial:>3}{o1:10.6f}{o2:10.6f}{o3:10.6f}     {t_field:10.5f}    {igiven:1}",
-                {
-                    "n": {"value": n},
-                    "serial": {"value": serial},
-                    "o1": {"value": row[0]},
-                    "o2": {"value": row[1]},
-                    "o3": {"value": row[2]},
-                    "t_field": {"value": row[3]},
-                    "igiven": {"value": igiven}
-                }
-            ))
-    return out
-
-
-def gen_master(validation_info):
-    vi = validation_info or {}
-
-    def gv(key, default=0):
-        return vi.get(key, default)
-
+def gen_cryst1(a, b, c, alpha, beta, gamma, s_group, z):
     return [
-        (
-            "MASTER    "
-            f"{gv('num_remark'):>5}"
-            f"{gv('num_het'):>5}"
-            f"{gv('num_helix'):>5}"
-            f"{gv('num_sheet'):>5}"
-            f"{gv('num_site'):>5}"
-            f"{gv('num_xform'):>5}"
-            f"{gv('num_coord'):>5}"
-            f"{gv('num_ter'):>5}"
-            f"{gv('num_conect'):>5}"
-            f"{gv('num_seq'):>5}"
-            f"{0:>5}"
-            f"{0:>5}"
-        )
+        f"CRYST1{a:>9.3f}{b:>9.3f}{c:>9.3f}{alpha:>7.2f}{beta:>7.2f}{gamma:>7.2f} " + \
+        f"{s_group:<11}{z:>4}"
     ]
 
 
-def gen_conect(connections):
-    connections_with_dup = {}
-    for atom1, bonded_atoms in connections.items():
-        for atom2 in bonded_atoms:
-            if atom1 not in connections_with_dup:
-                connections_with_dup[atom1] = []
-            connections_with_dup[atom1].append(atom2)
-            if atom2 not in connections_with_dup:
-                connections_with_dup[atom2] = []
-            connections_with_dup[atom2].append(atom1)
-    out = []
-    for atom1 in sorted(connections_with_dup.keys()):
-        bonded_atoms = sorted(set(connections_with_dup[atom1]))
-        line = f"CONECT{atom1:>5}"
-        for atom2 in bonded_atoms:
-            line += f"{atom2:>5}"
-        out.append(line)
-    return out
+def gen_matrix_rows(prefix, matrix):
+    rows = [
+        f"{row[0]:10.6f}{row[1]:10.6f}{row[2]:10.6f}     {row[3]:10.5f}"
+        for row in matrix
+    ]
+    return gen_line_from_template(
+        "{prefix}{n}    {rows:<44}",
+        {
+            "prefix": {"value": prefix},
+            "n": {"continuous_id": True, "hide_first": False},
+            "rows": {"value": rows, "split": True, "kwargs": {"prefix_space": False}},
+        },
+    )
 
 
-def _gen_atom_line(atom_info):
-    line = f'{atom_info["type"]:<6}{atom_info["atom_no"]:>5} {atom_info["atom_name"]:<4} '
-    line += f'{atom_info["residue_name"]:>3} {atom_info["chain_id"]}'
-    cx = atom_info["coord_x"] * unit_config.conversion_factor
-    cy = atom_info["coord_y"] * unit_config.conversion_factor
-    cz = atom_info["coord_z"] * unit_config.conversion_factor
-    line += f"{atom_info['residue_id']:>4}    {cx:8.3f}"
-    line += f"{cy:8.3f}{cz:8.3f}"
-    occ = atom_info.get("occupancy", 1.0)
-    line += f"{occ:6.2f}{atom_info['temp_factor']:6.2f}"
-    line += f"          {atom_info['element']:>2}"
-    if atom_info["charge"] == 1:
-        charge_str = "1+"
-    elif atom_info["charge"] == -1:
-        charge_str = "1-"
+def gen_ncs_matrix(serial, ncs_matrix, igiven):
+    rows = [
+        f"{row[0]:10.6f}{row[1]:10.6f}{row[2]:10.6f}     {row[3]:10.5f}    {igiven:1}"
+        for row in ncs_matrix
+    ]
+    return gen_line_from_template(
+        "MTRIX{n} {serial:>3}{rows:<44}",
+        {
+            "n": {"continuous_id": True, "hide_first": False},
+            "serial": {"value": serial},
+            "rows": {"value": rows, "split": True, "kwargs": {"prefix_space": False}},
+        },
+    )
+
+
+def gen_master(
+    num_remark, num_het, num_helix, num_sheet,
+    num_site, num_xform, num_coord, num_ter,
+    num_conect, num_seq
+):
+    return [
+        f"MASTER    {num_remark:>5}    0{num_het:>5}{num_helix:>5}" +
+        f"{num_sheet:>5}    0{num_site:>5}{num_xform:>5}" +
+        f"{num_coord:>5}{num_ter:>5}{num_conect:>5}{num_seq:>5}"
+    ]
+
+
+def gen_conect(atom1, bonded_atoms):
+    line = f"CONECT{atom1:>5}"
+    for atom2 in bonded_atoms:
+        line += f"{atom2:>5}"
+    return [line]
+
+def gen_charge(charge):
+    if charge == 1:
+        return "1+"
+    elif charge == -1:
+        return "1-"
     else:
-        charge_str = ""
-    line += f"{charge_str:>2}\n"
-    return line
+        return ""
+
+def gen_atom(
+    atom_type, atom_no, atom_name, alt_loc, residue_name,
+    chain_id, residue_id, icode, coord_x, coord_y, coord_z,
+    occupancy, temp_factor, element, charge
+):
+    line = f'{atom_type:<6}{atom_no:>5} {gen_atom_name(atom_name):<4}'
+    line += f'{alt_loc:1}{residue_name:>3} {chain_id}'
+    cx = coord_x
+    cy = coord_y
+    cz = coord_z
+    line += f"{residue_id:>4}{icode:1}   {cx:8.3f}"
+    line += f"{cy:8.3f}{cz:8.3f}"
+    occ = occupancy
+    line += f"{occ:6.2f}{temp_factor:6.2f}"
+    line += f"          {element:>2}"
+    charge_str = gen_charge(charge)
+    line += f"{charge_str:>2}"
+    return [line]
+
+def gen_anisou(
+    atom_no,atom_name, alt_loc, residue_name, chain_id, residue_id, icode, u11, u22, u33, u12, u13, u23, element, charge
+):
+    return [
+        f"ANISOU{atom_no:>5} {gen_atom_name(atom_name):<4}{alt_loc:1}" + \
+        f"{residue_name:>3} {chain_id}{residue_id:>4}{icode:1} " + \
+        f"{int(u11 * 10000):>7}{int(u22 * 10000):>7}{int(u33 * 10000):>7}" + \
+        f"{int(u12 * 10000):>7}{int(u13 * 10000):>7}{int(u23 * 10000):>7}      " + \
+        f"{element:>2}{gen_charge(charge):>2}"
+    ]
+
+def gen_ter(atom_no, residue_name, chain_id, residue_id):
+    return [f'TER   {atom_no:>5}      {residue_name:>3} {chain_id}{residue_id:>4}']
