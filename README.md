@@ -1,6 +1,6 @@
 # pypdbio
 
-`pypdbio` 是一个用于 **PDB 文件下载、读取与写入** 的轻量 Python 包。
+`pypdbio` 是一个用于 **PDB 文件下载、读取与写入** 的轻量 Python 包，兼容PDB标准的所有特征。
 
 ## 安装
 
@@ -27,10 +27,10 @@ writer = PdbWriter("1aki_copy.pdb")
 writer.write(pdb_data)
 ```
 
-## 许可证
-
-MIT
-
 ## API 参考
 
 包根 `from pypdbio import ...` 已导出解析/写出类型及 HEADER、连通性、二级结构、序列等相关数据类（以 `pypdbio.__all__` 为准）。完整说明见 [docs/reference.md](docs/reference.md)。
+
+## 许可证
+
+MIT
