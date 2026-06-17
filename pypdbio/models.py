@@ -439,6 +439,15 @@ class Residue(IterableParentBase, IterableChildBase):
     def add_atom(self, atom):
         self.add(atom)
 
+    def __getitem__(self, index):
+        if isinstance(index, str):
+            for atom in self.atoms:
+                full_name = atom.name + atom.alt_loc
+                if full_name == index:
+                    return atom
+            raise IndexError(f"Atom {index} not found")
+        return super().__getitem__(index)
+
 
 class Atom(IterableChildBase):
     """Atom class."""
